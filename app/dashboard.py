@@ -1,26 +1,27 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 
-from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error
-
-from transformers import pipeline
-
-from reportlab.platypus import (
-    SimpleDocTemplate,
-    Paragraph,
-    Spacer
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import (
+    mean_absolute_error,
+    r2_score
 )
 
-from reportlab.lib.styles import (
-    getSampleStyleSheet
-)
+from sqlalchemy import create_engine
+import google.generativeai as genai
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
-# =====================================
+api_key = os.getenv("AIzaSyDLrIaJof9l0Z2EjARrT4IQA9AY8IrOUVo")
+
+# ==========================================
 # PAGE CONFIG
-# =====================================
+# ==========================================
 
 st.set_page_config(
 
@@ -31,140 +32,65 @@ st.set_page_config(
     layout="wide"
 )
 
-# =====================================
-# SESSION STATE
-# =====================================
+# ==========================================
+# CUSTOM CSS
+# ==========================================
 
-if "authenticated" not in st.session_state:
+st.markdown("""
 
-    st.session_state["authenticated"] = False
+<style>
 
-# =====================================
-# LOGIN FUNCTION
-# =====================================
+body {
 
-def login():
+    background-color: #0E1117;
+}
 
-    st.title("🔐 Login Page")
+.main {
 
-    username = st.text_input(
-        "Username"
-    )
+    background-color: #0E1117;
+}
 
-    password = st.text_input(
-        "Password",
-        type="password"
-    )
+h1, h2, h3, h4 {
 
-    if st.button("Login"):
+    color: white;
+}
 
-        if (
-                username == "admin"
-                and
-                password == "admin123"
-        ):
+[data-testid="stSidebar"] {
 
-            st.session_state[
-                "authenticated"
-            ] = True
+    background-color: #111827;
+}
 
-            st.success(
-                "Login Successful!"
-            )
+.stButton>button {
 
-            st.rerun()
+    background-color: #4F46E5;
 
-        else:
+    color: white;
 
-            st.error(
-                "Invalid Credentials"
-            )
+    border-radius: 10px;
 
-# =====================================
-# LOGIN CHECK
-# =====================================
+    border: none;
 
-if not st.session_state["authenticated"]:
+    padding: 10px 20px;
+}
 
-    login()
+.stMetric {
 
-    st.stop()
+    background-color: #1F2937;
 
-# =====================================
+    padding: 15px;
+
+    border-radius: 15px;
+}
+
+</style>
+
+""", unsafe_allow_html=True)
+
+# ==========================================
 # SIDEBAR
-# =====================================
+# ==========================================
 
-st.sidebar.title("📊 Navigation")
-
-# Logout
-if st.sidebar.button("🚪 Logout"):
-
-    st.session_state[
-        "authenticated"
-    ] = False
-
-    st.rerun()
-
-# =====================================
-# THEME
-# =====================================
-
-theme = st.sidebar.selectbox(
-
-    "🎨 Select Theme",
-
-    [
-
-        "Light",
-
-        "Dark"
-    ]
-)
-
-# =====================================
-# DARK MODE
-# =====================================
-
-if theme == "Dark":
-
-    st.markdown(
-
-        """
-
-        <style>
-
-        .stApp {
-
-            background-color: #0E1117;
-
-            color: white;
-        }
-
-        section[data-testid="stSidebar"] {
-
-            background-color: #161B22;
-        }
-
-        h1, h2, h3, h4, h5, h6 {
-
-            color: white !important;
-        }
-
-        p, label, div {
-
-            color: white !important;
-        }
-
-        </style>
-
-        """,
-
-        unsafe_allow_html=True
-    )
-
-# =====================================
-# MENU
-# =====================================
+st.sidebar.title("🚀 InsightGPT AI")
 
 menu = st.sidebar.radio(
 
@@ -176,85 +102,46 @@ menu = st.sidebar.radio(
 
         "Analytics",
 
+        "Business Insights",
+
         "AI Chat",
 
         "Predictions",
 
-        "Reports"
+        "Reports",
+
+        "SQL Analytics"
     ]
 )
 
-# =====================================
+# ==========================================
 # TITLE
-# =====================================
+# ==========================================
 
 st.title("🚀 InsightGPT AI")
 
 st.subheader(
-    "Enterprise GenAI Analytics Platform"
+    "Enterprise AI Analytics Platform"
 )
 
-# =====================================
+# ==========================================
 # FILE UPLOAD
-# =====================================
+# ==========================================
 
 uploaded_file = st.file_uploader(
 
     "📂 Upload Dataset",
 
-    type=[
-
-        "csv",
-
-        "xlsx"
-    ]
+    type=["csv", "xlsx"]
 )
 
-# =====================================
-# DATA CLEANING
-# =====================================
-
-def clean_data(df):
-
-    df.drop_duplicates(
-        inplace=True
-    )
-
-    numeric_cols = df.select_dtypes(
-        include='number'
-    ).columns
-
-    for col in numeric_cols:
-
-        df[col].fillna(
-
-            df[col].mean(),
-
-            inplace=True
-        )
-
-    object_cols = df.select_dtypes(
-        include='object'
-    ).columns
-
-    for col in object_cols:
-
-        df[col].fillna(
-
-            "Unknown",
-
-            inplace=True
-        )
-
-    return df
-
-# =====================================
+# ==========================================
 # LOAD DATA
-# =====================================
+# ==========================================
 
 df = None
 
-if uploaded_file:
+if uploaded_file is not None:
 
     try:
 
@@ -270,104 +157,15 @@ if uploaded_file:
                 uploaded_file
             )
 
-        df = clean_data(df)
-
     except Exception as e:
 
         st.error(
-            f"Error loading file: {e}"
+            f"Error loading dataset: {e}"
         )
 
-# =====================================
-# AI MODEL
-# =====================================
-
-@st.cache_resource
-def load_model():
-
-    model = pipeline(
-
-        "text-generation",
-
-        model="distilgpt2"
-    )
-
-    return model
-
-chatbot = load_model()
-
-# =====================================
-# PDF REPORT
-# =====================================
-
-def generate_pdf(df):
-
-    pdf_file = "AI_Report.pdf"
-
-    doc = SimpleDocTemplate(
-        pdf_file
-    )
-
-    styles = getSampleStyleSheet()
-
-    elements = []
-
-    title = Paragraph(
-
-        "InsightGPT AI Report",
-
-        styles['Title']
-    )
-
-    elements.append(title)
-
-    elements.append(
-        Spacer(1, 20)
-    )
-
-    rows = df.shape[0]
-
-    cols = df.shape[1]
-
-    info = Paragraph(
-
-        f"""
-        Total Rows: {rows}
-        <br/>
-        Total Columns: {cols}
-        """,
-
-        styles['BodyText']
-    )
-
-    elements.append(info)
-
-    elements.append(
-        Spacer(1, 20)
-    )
-
-    summary = df.describe().to_string()
-
-    summary_text = Paragraph(
-
-        f"""
-        Statistical Summary:
-        <br/><br/>
-        {summary}
-        """,
-
-        styles['BodyText']
-    )
-
-    elements.append(summary_text)
-
-    doc.build(elements)
-
-    return pdf_file
-
-# =====================================
+# ==========================================
 # DASHBOARD MODULE
-# =====================================
+# ==========================================
 
 if menu == "Dashboard":
 
@@ -375,22 +173,35 @@ if menu == "Dashboard":
 
     if df is not None:
 
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
 
-        col1.metric(
-            "Rows",
-            df.shape[0]
-        )
+        with col1:
 
-        col2.metric(
-            "Columns",
-            df.shape[1]
-        )
+            st.metric(
+                "Rows",
+                df.shape[0]
+            )
 
-        col3.metric(
-            "Missing Values",
-            df.isnull().sum().sum()
-        )
+        with col2:
+
+            st.metric(
+                "Columns",
+                df.shape[1]
+            )
+
+        with col3:
+
+            st.metric(
+                "Missing Values",
+                df.isnull().sum().sum()
+            )
+
+        with col4:
+
+            st.metric(
+                "Duplicate Rows",
+                df.duplicated().sum()
+            )
 
         st.subheader(
             "📄 Dataset Preview"
@@ -400,34 +211,42 @@ if menu == "Dashboard":
             df.head()
         )
 
+        st.subheader(
+            "📌 Dataset Information"
+        )
+
+        info_df = pd.DataFrame({
+
+            "Column": df.columns,
+
+            "Data Type": df.dtypes.astype(str),
+
+            "Missing Values": df.isnull().sum().values
+        })
+
+        st.dataframe(info_df)
+
     else:
 
         st.info(
             "Upload dataset first."
         )
 
-# =====================================
+# ==========================================
 # ANALYTICS MODULE
-# =====================================
+# ==========================================
 
 elif menu == "Analytics":
 
-    st.header("📈 Analytics")
+    st.header("📈 Advanced Analytics")
 
     if df is not None:
 
         numeric_cols = df.select_dtypes(
-            include='number'
-        ).columns
+            include=np.number
+        ).columns.tolist()
 
         if len(numeric_cols) > 0:
-
-            selected_col = st.selectbox(
-
-                "Select Column",
-
-                numeric_cols
-            )
 
             chart_type = st.selectbox(
 
@@ -437,65 +256,77 @@ elif menu == "Analytics":
 
                     "Histogram",
 
+                    "Scatter Plot",
+
                     "Box Plot",
 
                     "Line Chart"
                 ]
             )
 
+            selected_col = st.selectbox(
+
+                "Select Column",
+
+                numeric_cols
+            )
+
             if chart_type == "Histogram":
 
                 fig = px.histogram(
-
                     df,
-
                     x=selected_col
+                )
+
+            elif chart_type == "Scatter Plot":
+
+                y_col = st.selectbox(
+                    "Select Y Axis",
+                    numeric_cols
+                )
+
+                fig = px.scatter(
+                    df,
+                    x=selected_col,
+                    y=y_col
                 )
 
             elif chart_type == "Box Plot":
 
                 fig = px.box(
-
                     df,
-
                     y=selected_col
                 )
 
             else:
 
                 fig = px.line(
-
                     df,
-
                     y=selected_col
                 )
 
             st.plotly_chart(
-
                 fig,
-
                 use_container_width=True
             )
 
             st.subheader(
-                "🔥 Correlation Matrix"
+                "🔥 Correlation Heatmap"
             )
 
-            corr = df[
-                numeric_cols
-            ].corr()
+            corr = df[numeric_cols].corr()
 
             heatmap = px.imshow(
 
                 corr,
 
-                text_auto=True
+                text_auto=True,
+
+                aspect="auto"
             )
 
             st.plotly_chart(
-
                 heatmap,
-
                 use_container_width=True
             )
 
@@ -507,189 +338,404 @@ elif menu == "Analytics":
 
     else:
 
-        st.warning(
+        st.info(
             "Upload dataset first."
         )
 
-# =====================================
-# AI CHAT MODULE
-# =====================================
+# ==========================================
+# BUSINESS INSIGHTS MODULE
+# ==========================================
 
-elif menu == "AI Chat":
+elif menu == "Business Insights":
 
-    st.header(
-        "🤖 AI Analytics Assistant"
-    )
-
-    question = st.text_input(
-        "Ask business questions"
-    )
-
-    if question:
-
-        with st.spinner(
-                "Thinking..."
-        ):
-
-            response = chatbot(
-
-                question,
-
-                max_length=120,
-
-                num_return_sequences=1
-            )
-
-            answer = response[0][
-                "generated_text"
-            ]
-
-            st.success(
-                "AI Response"
-            )
-
-            st.write(answer)
-
-# =====================================
-# PREDICTION MODULE
-# =====================================
-
-elif menu == "Predictions":
-
-    st.header(
-        "📈 AI Predictions"
-    )
+    st.header("📊 Business Insights")
 
     if df is not None:
 
         numeric_cols = df.select_dtypes(
-            include='number'
-        ).columns
+            include=np.number
+        ).columns.tolist()
 
-        if len(numeric_cols) >= 2:
+        total_rows = df.shape[0]
 
-            target_col = st.selectbox(
+        total_columns = df.shape[1]
 
-                "🎯 Target Column",
+        missing_values = df.isnull().sum().sum()
 
-                numeric_cols
+        duplicate_rows = df.duplicated().sum()
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+
+            st.metric(
+                "Total Rows",
+                total_rows
             )
 
-            feature_col = st.selectbox(
+        with col2:
 
-                "📊 Feature Column",
-
-                numeric_cols
+            st.metric(
+                "Total Columns",
+                total_columns
             )
 
-            if target_col != feature_col:
+        with col3:
 
-                X = df[[feature_col]]
+            st.metric(
+                "Missing Values",
+                missing_values
+            )
 
-                y = df[target_col]
+        with col4:
 
-                X_train, X_test, y_train, y_test = train_test_split(
+            st.metric(
+                "Duplicate Rows",
+                duplicate_rows
+            )
 
-                    X,
-                    y,
+        st.subheader(
+            "📈 Statistical Summary"
+        )
 
-                    test_size=0.2,
+        st.dataframe(
+            df.describe()
+        )
 
-                    random_state=42
+        st.subheader(
+            "🔥 Smart Insights"
+        )
+
+        for col in numeric_cols:
+
+            st.success(
+
+                f"""
+
+                📌 {col}
+
+                Mean: {df[col].mean():.2f}
+
+                Max: {df[col].max():.2f}
+
+                Min: {df[col].min():.2f}
+
+                Std Dev: {df[col].std():.2f}
+
+                """
+            )
+
+        selected_col = st.selectbox(
+
+            "Select Column for Distribution",
+
+            numeric_cols
+        )
+
+        fig = px.histogram(
+
+            df,
+
+            x=selected_col,
+
+            marginal="box"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+        csv = df.to_csv(
+            index=False
+        ).encode("utf-8")
+
+        st.download_button(
+
+            label="⬇ Download Dataset",
+
+            data=csv,
+
+            file_name="clean_dataset.csv",
+
+            mime="text/csv"
+        )
+
+    else:
+
+        st.info(
+            "Upload dataset first."
+        )
+
+# ==========================================
+# AI CHAT MODULE
+# ==========================================
+
+elif menu == "AI Chat":
+
+    st.header("🤖 Gemini AI Assistant")
+
+    user_question = st.text_area(
+        "Ask AI anything"
+    )
+
+    if st.button("Generate AI Response"):
+
+        if user_question:
+
+            try:
+
+                genai.configure(
+                    api_key=api_key
                 )
 
-                model = LinearRegression()
-
-                model.fit(
-                    X_train,
-                    y_train
+                model = genai.GenerativeModel(
+                    "gemini-1.5-flash"
                 )
 
-                predictions = model.predict(
-                    X_test
-                )
-
-                error = mean_absolute_error(
-
-                    y_test,
-
-                    predictions
+                response = model.generate_content(
+                    user_question
                 )
 
                 st.success(
-
-                    f"Model trained successfully! MAE: {error:.2f}"
-                )
-
-                custom_input = st.number_input(
-
-                    f"Enter {feature_col}"
-                )
-
-                future_prediction = model.predict(
-
-                    [[custom_input]]
-                )
-
-                st.subheader(
-                    "🔮 Prediction Result"
+                    "AI Response"
                 )
 
                 st.write(
+                    response.text
+                )
 
-                    f"Predicted {target_col}: "
+            except Exception as e:
 
-                    f"{future_prediction[0]:.2f}"
+                st.error(
+                    f"Error: {e}"
                 )
 
         else:
 
             st.warning(
-                "Need at least 2 numeric columns."
+                "Please enter a question."
+            )
+# ==========================================
+# PREDICTION MODULE
+# ==========================================
+
+elif menu == "Predictions":
+
+    st.header("📉 Machine Learning Predictions")
+
+    if df is not None:
+
+        numeric_cols = df.select_dtypes(
+            include=np.number
+        ).columns.tolist()
+
+        if len(numeric_cols) >= 2:
+
+            target_col = st.selectbox(
+
+                "🎯 Select Target Column",
+
+                numeric_cols
+            )
+
+            feature_cols = [
+
+                col for col in numeric_cols
+
+                if col != target_col
+            ]
+
+            X = df[feature_cols]
+
+            y = df[target_col]
+
+            X_train, X_test, y_train, y_test = train_test_split(
+
+                X,
+                y,
+
+                test_size=0.2,
+
+                random_state=42
+            )
+
+            model = LinearRegression()
+
+            model.fit(
+                X_train,
+                y_train
+            )
+
+            predictions = model.predict(
+                X_test
+            )
+
+            mae = mean_absolute_error(
+                y_test,
+                predictions
+            )
+
+            r2 = r2_score(
+                y_test,
+                predictions
+            )
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                st.metric(
+                    "MAE",
+                    round(mae, 2)
+                )
+
+            with col2:
+
+                st.metric(
+                    "R² Score",
+                    round(r2, 2)
+                )
+
+            fig = go.Figure()
+
+            fig.add_trace(
+
+                go.Scatter(
+
+                    y=y_test,
+
+                    mode='lines',
+
+                    name='Actual'
+                )
+            )
+
+            fig.add_trace(
+
+                go.Scatter(
+
+                    y=predictions,
+
+                    mode='lines',
+
+                    name='Predicted'
+                )
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
+
+        else:
+
+            st.warning(
+                "Need minimum 2 numeric columns."
             )
 
     else:
 
-        st.warning(
+        st.info(
             "Upload dataset first."
         )
 
-# =====================================
-# REPORT MODULE
-# =====================================
+# ==========================================
+# REPORTS MODULE
+# ==========================================
 
 elif menu == "Reports":
 
-    st.header(
-        "📑 AI Reports"
-    )
+    st.header("📑 Reports")
 
     if df is not None:
 
-        if st.button(
-                "📄 Generate PDF Report"
-        ):
+        st.subheader(
+            "Dataset Summary"
+        )
 
-            pdf_path = generate_pdf(df)
+        st.write(
+            df.describe()
+        )
 
-            with open(
-                    pdf_path,
-                    "rb"
-            ) as file:
+        st.download_button(
 
-                st.download_button(
+            label="⬇ Download CSV Report",
 
-                    label="⬇ Download Report",
+            data=df.to_csv(index=False),
 
-                    data=file,
+            file_name="processed_dataset.csv",
 
-                    file_name="AI_Report.pdf",
+            mime="text/csv"
+        )
 
-                    mime="application/pdf"
-                )
+        st.success(
+            "Report Generated Successfully!"
+        )
 
     else:
 
-        st.warning(
+        st.info(
             "Upload dataset first."
         )
+
+# ==========================================
+# SQL ANALYTICS MODULE
+# ==========================================
+
+elif menu == "SQL Analytics":
+
+    st.header("🗄 SQL Analytics")
+
+    host = st.text_input("Host")
+
+    user = st.text_input("Username")
+
+    password = st.text_input(
+
+        "Password",
+
+        type="password"
+    )
+
+    database = st.text_input("Database")
+
+    query = st.text_area(
+        "Enter SQL Query"
+    )
+
+    if st.button(
+            "Connect Database"
+    ):
+
+        try:
+
+            engine = create_engine(
+
+                f"mysql+pymysql://{user}:{password}@{host}/{database}"
+            )
+
+            st.success(
+                "Database Connected Successfully!"
+            )
+
+            if query:
+
+                result = pd.read_sql(
+                    query,
+                    engine
+                )
+
+                st.subheader(
+                    "📊 Query Result"
+                )
+
+                st.dataframe(
+                    result
+                )
+
+        except Exception as e:
+
+            st.error(
+                f"Connection Error: {e}"
+            )

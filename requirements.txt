@@ -5,7 +5,9 @@ plotly
 scikit-learn
 matplotlib
 seaborn
-openai
+openpyxl
+joblib
+requests
 python-dotenv
-transformers
-torch
+google-generativeai
+python-dotenv
