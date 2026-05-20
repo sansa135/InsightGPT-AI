@@ -5,9 +5,8 @@ plotly
 scikit-learn
 matplotlib
 seaborn
-openpyxl
-joblib
-requests
-python-dotenv
+yfinance
 google-generativeai
 python-dotenv
+sqlalchemy
+openpyxl

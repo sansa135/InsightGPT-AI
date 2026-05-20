@@ -3,6 +3,12 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+import google.generativeai as genai
+import yfinance as yf
+import os
+
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
 
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
@@ -11,298 +17,208 @@ from sklearn.metrics import (
     r2_score
 )
 
-from sqlalchemy import create_engine
-import google.generativeai as genai
-from dotenv import load_dotenv
-import os
-load_dotenv()
+from sklearn.ensemble import RandomForestRegressor
 
-api_key = os.getenv("AIzaSyDLrIaJof9l0Z2EjARrT4IQA9AY8IrOUVo")
-
-# ==========================================
+# ==============================
 # PAGE CONFIG
-# ==========================================
+# ==============================
 
 st.set_page_config(
-
     page_title="InsightGPT AI",
-
     page_icon="🚀",
-
     layout="wide"
 )
 
-# ==========================================
-# CUSTOM CSS
-# ==========================================
+# ==============================
+# LOAD ENV
+# ==============================
 
-st.markdown("""
+load_dotenv()
 
-<style>
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-body {
+# ==============================
+# GEMINI SETUP
+# ==============================
 
-    background-color: #0E1117;
-}
+try:
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel("gemini-1.5-flash")
+except:
+    model = None
 
-.main {
-
-    background-color: #0E1117;
-}
-
-h1, h2, h3, h4 {
-
-    color: white;
-}
-
-[data-testid="stSidebar"] {
-
-    background-color: #111827;
-}
-
-.stButton>button {
-
-    background-color: #4F46E5;
-
-    color: white;
-
-    border-radius: 10px;
-
-    border: none;
-
-    padding: 10px 20px;
-}
-
-.stMetric {
-
-    background-color: #1F2937;
-
-    padding: 15px;
-
-    border-radius: 15px;
-}
-
-</style>
-
-""", unsafe_allow_html=True)
-
-# ==========================================
+# ==============================
 # SIDEBAR
-# ==========================================
+# ==============================
 
-st.sidebar.title("🚀 InsightGPT AI")
+st.sidebar.title("📊 Navigation")
 
 menu = st.sidebar.radio(
-
     "Select Module",
-
     [
-
         "Dashboard",
-
         "Analytics",
-
-        "Business Insights",
-
         "AI Chat",
-
         "Predictions",
-
-        "Reports",
-
-        "SQL Analytics"
+        "Stock Market",
+        "Reports"
     ]
 )
 
-# ==========================================
-# TITLE
-# ==========================================
-
-st.title("🚀 InsightGPT AI")
-
-st.subheader(
-    "Enterprise AI Analytics Platform"
+theme = st.sidebar.selectbox(
+    "Theme",
+    ["Light", "Dark"]
 )
 
-# ==========================================
-# FILE UPLOAD
-# ==========================================
+# ==============================
+# THEME
+# ==============================
 
-uploaded_file = st.file_uploader(
+if theme == "Dark":
 
-    "📂 Upload Dataset",
+    st.markdown(
+        """
+        <style>
+        .stApp {
+            background-color: #0E1117;
+            color: white;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
-    type=["csv", "xlsx"]
-)
-
-# ==========================================
-# LOAD DATA
-# ==========================================
-
-df = None
-
-if uploaded_file is not None:
-
-    try:
-
-        if uploaded_file.name.endswith(".csv"):
-
-            df = pd.read_csv(
-                uploaded_file
-            )
-
-        else:
-
-            df = pd.read_excel(
-                uploaded_file
-            )
-
-    except Exception as e:
-
-        st.error(
-            f"Error loading dataset: {e}"
-        )
-
-# ==========================================
-# DASHBOARD MODULE
-# ==========================================
+# ==============================
+# DASHBOARD
+# ==============================
 
 if menu == "Dashboard":
 
-    st.header("📊 Dashboard")
+    st.title("🚀 InsightGPT AI")
+    st.subheader("Enterprise GenAI Analytics Platform")
 
-    if df is not None:
+    uploaded_file = st.file_uploader(
+        "Upload Dataset",
+        type=["csv", "xlsx"]
+    )
 
-        col1, col2, col3, col4 = st.columns(4)
+    if uploaded_file is not None:
 
-        with col1:
+        # ======================
+        # READ FILE
+        # ======================
 
-            st.metric(
-                "Rows",
-                df.shape[0]
-            )
+        if uploaded_file.name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file)
 
-        with col2:
+        else:
+            df = pd.read_excel(uploaded_file)
 
-            st.metric(
-                "Columns",
-                df.shape[1]
-            )
+        st.success("Dataset Uploaded Successfully ✅")
 
-        with col3:
+        # ======================
+        # OVERVIEW
+        # ======================
 
-            st.metric(
-                "Missing Values",
-                df.isnull().sum().sum()
-            )
+        st.header("📌 Dataset Overview")
 
-        with col4:
+        col1, col2, col3 = st.columns(3)
 
-            st.metric(
-                "Duplicate Rows",
-                df.duplicated().sum()
-            )
-
-        st.subheader(
-            "📄 Dataset Preview"
+        col1.metric(
+            "Rows",
+            df.shape[0]
         )
 
-        st.dataframe(
-            df.head()
+        col2.metric(
+            "Columns",
+            df.shape[1]
         )
 
-        st.subheader(
-            "📌 Dataset Information"
+        col3.metric(
+            "Missing Values",
+            df.isnull().sum().sum()
         )
+
+        st.dataframe(df.head())
+
+        # ======================
+        # COLUMN INFO
+        # ======================
+
+        st.header("📋 Column Information")
 
         info_df = pd.DataFrame({
-
             "Column": df.columns,
-
             "Data Type": df.dtypes.astype(str),
-
             "Missing Values": df.isnull().sum().values
         })
 
         st.dataframe(info_df)
 
-    else:
+        # ======================
+        # VISUALIZATION
+        # ======================
 
-        st.info(
-            "Upload dataset first."
-        )
+        st.header("📊 Interactive Visualization")
 
-# ==========================================
-# ANALYTICS MODULE
-# ==========================================
-
-elif menu == "Analytics":
-
-    st.header("📈 Advanced Analytics")
-
-    if df is not None:
-
-        numeric_cols = df.select_dtypes(
-            include=np.number
-        ).columns.tolist()
+        numeric_cols = df.select_dtypes(include=np.number).columns
 
         if len(numeric_cols) > 0:
 
-            chart_type = st.selectbox(
-
-                "Select Chart",
-
-                [
-
-                    "Histogram",
-
-                    "Scatter Plot",
-
-                    "Box Plot",
-
-                    "Line Chart"
-                ]
-            )
-
-            selected_col = st.selectbox(
-
-                "Select Column",
-
+            x_axis = st.selectbox(
+                "Select X Axis",
                 numeric_cols
             )
 
-            if chart_type == "Histogram":
+            y_axis = st.selectbox(
+                "Select Y Axis",
+                numeric_cols,
+                index=min(1, len(numeric_cols)-1)
+            )
 
-                fig = px.histogram(
-                    df,
-                    x=selected_col
-                )
+            chart_type = st.selectbox(
+                "Chart Type",
+                [
+                    "Scatter",
+                    "Line",
+                    "Bar",
+                    "Histogram"
+                ]
+            )
 
-            elif chart_type == "Scatter Plot":
-
-                y_col = st.selectbox(
-                    "Select Y Axis",
-                    numeric_cols
-                )
+            if chart_type == "Scatter":
 
                 fig = px.scatter(
                     df,
-                    x=selected_col,
-                    y=y_col
+                    x=x_axis,
+                    y=y_axis,
+                    title=f"{x_axis} vs {y_axis}"
                 )
 
-            elif chart_type == "Box Plot":
+            elif chart_type == "Line":
 
-                fig = px.box(
+                fig = px.line(
                     df,
-                    y=selected_col
+                    x=x_axis,
+                    y=y_axis,
+                    title=f"{x_axis} vs {y_axis}"
+                )
+
+            elif chart_type == "Bar":
+
+                fig = px.bar(
+                    df,
+                    x=x_axis,
+                    y=y_axis,
+                    title=f"{x_axis} vs {y_axis}"
                 )
 
             else:
 
-                fig = px.line(
+                fig = px.histogram(
                     df,
-                    y=selected_col
+                    x=x_axis,
+                    title=f"{x_axis} Distribution"
                 )
 
             st.plotly_chart(
@@ -310,317 +226,238 @@ elif menu == "Analytics":
                 use_container_width=True
             )
 
-            st.subheader(
-                "🔥 Correlation Heatmap"
-            )
+# ==============================
+# ANALYTICS MODULE
+# ==============================
 
-            corr = df[numeric_cols].corr()
+elif menu == "Analytics":
 
-            heatmap = px.imshow(
+    st.title("📈 Advanced Analytics")
 
+    uploaded_file = st.file_uploader(
+        "Upload Dataset",
+        type=["csv", "xlsx"]
+    )
+
+    if uploaded_file is not None:
+
+        if uploaded_file.name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file)
+
+        else:
+            df = pd.read_excel(uploaded_file)
+
+        st.subheader("Statistical Summary")
+
+        st.dataframe(df.describe())
+
+        st.subheader("Correlation Matrix")
+
+        numeric_df = df.select_dtypes(include=np.number)
+
+        if not numeric_df.empty:
+
+            corr = numeric_df.corr()
+
+            fig = px.imshow(
                 corr,
-
                 text_auto=True,
-
-                aspect="auto"
+                aspect="auto",
+                title="Correlation Heatmap"
             )
 
             st.plotly_chart(
-                heatmap,
+                fig,
                 use_container_width=True
             )
 
-        else:
+        st.subheader("Missing Values")
 
-            st.warning(
-                "No numeric columns found."
-            )
+        missing = df.isnull().sum()
 
-    else:
+        missing_df = pd.DataFrame({
+            "Column": missing.index,
+            "Missing Values": missing.values
+        })
 
-        st.info(
-            "Upload dataset first."
-        )
+        st.dataframe(missing_df)
 
-# ==========================================
-# BUSINESS INSIGHTS MODULE
-# ==========================================
-
-elif menu == "Business Insights":
-
-    st.header("📊 Business Insights")
-
-    if df is not None:
-
-        numeric_cols = df.select_dtypes(
-            include=np.number
-        ).columns.tolist()
-
-        total_rows = df.shape[0]
-
-        total_columns = df.shape[1]
-
-        missing_values = df.isnull().sum().sum()
-
-        duplicate_rows = df.duplicated().sum()
-
-        col1, col2, col3, col4 = st.columns(4)
-
-        with col1:
-
-            st.metric(
-                "Total Rows",
-                total_rows
-            )
-
-        with col2:
-
-            st.metric(
-                "Total Columns",
-                total_columns
-            )
-
-        with col3:
-
-            st.metric(
-                "Missing Values",
-                missing_values
-            )
-
-        with col4:
-
-            st.metric(
-                "Duplicate Rows",
-                duplicate_rows
-            )
-
-        st.subheader(
-            "📈 Statistical Summary"
-        )
-
-        st.dataframe(
-            df.describe()
-        )
-
-        st.subheader(
-            "🔥 Smart Insights"
-        )
-
-        for col in numeric_cols:
-
-            st.success(
-
-                f"""
-
-                📌 {col}
-
-                Mean: {df[col].mean():.2f}
-
-                Max: {df[col].max():.2f}
-
-                Min: {df[col].min():.2f}
-
-                Std Dev: {df[col].std():.2f}
-
-                """
-            )
-
-        selected_col = st.selectbox(
-
-            "Select Column for Distribution",
-
-            numeric_cols
-        )
-
-        fig = px.histogram(
-
-            df,
-
-            x=selected_col,
-
-            marginal="box"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
-
-        csv = df.to_csv(
-            index=False
-        ).encode("utf-8")
-
-        st.download_button(
-
-            label="⬇ Download Dataset",
-
-            data=csv,
-
-            file_name="clean_dataset.csv",
-
-            mime="text/csv"
-        )
-
-    else:
-
-        st.info(
-            "Upload dataset first."
-        )
-
-# ==========================================
+# ==============================
 # AI CHAT MODULE
-# ==========================================
+# ==============================
 
 elif menu == "AI Chat":
 
-    st.header("🤖 Gemini AI Assistant")
+    st.title("🤖 AI Data Assistant")
 
-    user_question = st.text_area(
-        "Ask AI anything"
+    prompt = st.text_area(
+        "Ask AI anything about Analytics / ML / Data"
     )
 
     if st.button("Generate AI Response"):
 
-        if user_question:
+        if model is not None:
 
             try:
 
-                genai.configure(
-                    api_key=api_key
-                )
+                response = model.generate_content(prompt)
 
-                model = genai.GenerativeModel(
-                    "gemini-1.5-flash"
-                )
+                st.success("AI Response Generated ✅")
 
-                response = model.generate_content(
-                    user_question
-                )
-
-                st.success(
-                    "AI Response"
-                )
-
-                st.write(
-                    response.text
-                )
+                st.write(response.text)
 
             except Exception as e:
 
-                st.error(
-                    f"Error: {e}"
-                )
+                st.error(f"Error: {e}")
 
         else:
 
-            st.warning(
-                "Please enter a question."
-            )
-# ==========================================
+            st.error("Gemini API Key Missing")
+
+# ==============================
 # PREDICTION MODULE
-# ==========================================
+# ==============================
 
 elif menu == "Predictions":
 
-    st.header("📉 Machine Learning Predictions")
+    st.title("🔮 ML Prediction Engine")
 
-    if df is not None:
+    uploaded_file = st.file_uploader(
+        "Upload Dataset",
+        type=["csv"]
+    )
 
-        numeric_cols = df.select_dtypes(
-            include=np.number
-        ).columns.tolist()
+    if uploaded_file is not None:
 
-        if len(numeric_cols) >= 2:
+        df = pd.read_csv(uploaded_file)
 
-            target_col = st.selectbox(
+        st.dataframe(df.head())
 
-                "🎯 Select Target Column",
+        numeric_cols = list(
+            df.select_dtypes(include=np.number).columns
+        )
 
-                numeric_cols
-            )
+        target = st.selectbox(
+            "Select Target Column",
+            numeric_cols
+        )
 
-            feature_cols = [
+        features = st.multiselect(
+            "Select Feature Columns",
+            numeric_cols
+        )
 
-                col for col in numeric_cols
-
-                if col != target_col
+        model_type = st.selectbox(
+            "Choose ML Model",
+            [
+                "Linear Regression",
+                "Random Forest"
             ]
+        )
 
-            X = df[feature_cols]
+        if st.button("Train Model"):
 
-            y = df[target_col]
+            if len(features) > 0:
 
-            X_train, X_test, y_train, y_test = train_test_split(
+                X = df[features]
+                y = df[target]
 
-                X,
-                y,
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X,
+                    y,
+                    test_size=0.2,
+                    random_state=42
+                )
 
-                test_size=0.2,
+                if model_type == "Linear Regression":
 
-                random_state=42
-            )
+                    model_ml = LinearRegression()
 
-            model = LinearRegression()
+                else:
 
-            model.fit(
-                X_train,
-                y_train
-            )
+                    model_ml = RandomForestRegressor()
 
-            predictions = model.predict(
-                X_test
-            )
+                model_ml.fit(
+                    X_train,
+                    y_train
+                )
 
-            mae = mean_absolute_error(
-                y_test,
-                predictions
-            )
+                preds = model_ml.predict(X_test)
 
-            r2 = r2_score(
-                y_test,
-                predictions
-            )
+                mae = mean_absolute_error(
+                    y_test,
+                    preds
+                )
 
-            col1, col2 = st.columns(2)
+                r2 = r2_score(
+                    y_test,
+                    preds
+                )
 
-            with col1:
+                st.success("Model Trained Successfully ✅")
 
-                st.metric(
+                col1, col2 = st.columns(2)
+
+                col1.metric(
                     "MAE",
                     round(mae, 2)
                 )
 
-            with col2:
-
-                st.metric(
-                    "R² Score",
+                col2.metric(
+                    "R2 Score",
                     round(r2, 2)
                 )
 
-            fig = go.Figure()
+                pred_df = pd.DataFrame({
+                    "Actual": y_test,
+                    "Predicted": preds
+                })
 
-            fig.add_trace(
+                st.dataframe(pred_df.head())
 
-                go.Scatter(
-
-                    y=y_test,
-
-                    mode='lines',
-
-                    name='Actual'
+                fig = px.scatter(
+                    pred_df,
+                    x="Actual",
+                    y="Predicted",
+                    title="Actual vs Predicted"
                 )
+
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True
+                )
+
+# ==============================
+# STOCK MARKET MODULE
+# ==============================
+
+elif menu == "Stock Market":
+
+    st.title("📈 AI Stock Market Analytics")
+
+    stock = st.text_input(
+        "Enter Stock Symbol",
+        "AAPL"
+    )
+
+    if st.button("Analyze Stock"):
+
+        try:
+
+            data = yf.download(
+                stock,
+                period="1y"
             )
 
-            fig.add_trace(
+            st.success("Stock Data Loaded ✅")
 
-                go.Scatter(
+            st.dataframe(data.tail())
 
-                    y=predictions,
-
-                    mode='lines',
-
-                    name='Predicted'
-                )
+            fig = px.line(
+                data,
+                x=data.index,
+                y="Close",
+                title=f"{stock} Stock Price"
             )
 
             st.plotly_chart(
@@ -628,114 +465,45 @@ elif menu == "Predictions":
                 use_container_width=True
             )
 
-        else:
+            if model is not None:
 
-            st.warning(
-                "Need minimum 2 numeric columns."
-            )
+                prompt = f"""
+                Analyze this stock:
+                {stock}
 
-    else:
+                Latest Price:
+                {data['Close'].iloc[-1]}
+                """
 
-        st.info(
-            "Upload dataset first."
-        )
+                response = model.generate_content(prompt)
 
-# ==========================================
-# REPORTS MODULE
-# ==========================================
+                st.subheader("🤖 AI Market Insight")
 
-elif menu == "Reports":
-
-    st.header("📑 Reports")
-
-    if df is not None:
-
-        st.subheader(
-            "Dataset Summary"
-        )
-
-        st.write(
-            df.describe()
-        )
-
-        st.download_button(
-
-            label="⬇ Download CSV Report",
-
-            data=df.to_csv(index=False),
-
-            file_name="processed_dataset.csv",
-
-            mime="text/csv"
-        )
-
-        st.success(
-            "Report Generated Successfully!"
-        )
-
-    else:
-
-        st.info(
-            "Upload dataset first."
-        )
-
-# ==========================================
-# SQL ANALYTICS MODULE
-# ==========================================
-
-elif menu == "SQL Analytics":
-
-    st.header("🗄 SQL Analytics")
-
-    host = st.text_input("Host")
-
-    user = st.text_input("Username")
-
-    password = st.text_input(
-
-        "Password",
-
-        type="password"
-    )
-
-    database = st.text_input("Database")
-
-    query = st.text_area(
-        "Enter SQL Query"
-    )
-
-    if st.button(
-            "Connect Database"
-    ):
-
-        try:
-
-            engine = create_engine(
-
-                f"mysql+pymysql://{user}:{password}@{host}/{database}"
-            )
-
-            st.success(
-                "Database Connected Successfully!"
-            )
-
-            if query:
-
-                result = pd.read_sql(
-                    query,
-                    engine
-                )
-
-                st.subheader(
-                    "📊 Query Result"
-                )
-
-                st.dataframe(
-                    result
-                )
+                st.write(response.text)
 
         except Exception as e:
 
-            st.error(
-                f"Connection Error: {e}"
-            )
+            st.error(f"Error: {e}")
+
+# ==============================
+# REPORTS MODULE
+# ==============================
+
+elif menu == "Reports":
+
+    st.title("📄 AI Reports")
+
+    st.info(
+        "PDF Report Generation Coming Soon 🔥"
+    )
+
+    st.markdown("""
+    ### Features Included
+    - AI Analytics
+    - ML Prediction
+    - Stock Market AI
+    - Interactive Charts
+    - Data Visualization
+    - Enterprise Dashboard
+    - Gemini AI Assistant
+    """)
